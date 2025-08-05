@@ -1,0 +1,32 @@
+name: Update Proxies
+
+on:
+  schedule:
+    - cron: '0 */4 * * *'  # 每4小时运行一次
+  workflow_dispatch:      # 支持手动触发
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: pip install requests pyyaml
+
+      - name: 运行脚本生成文件
+        run: python generate.py
+
+      - name: 提交并推送更改
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add docs/proxy.yaml docs/sub
+          git commit -m "更新代理文件" || echo "没有更改需要提交"
+          git push
