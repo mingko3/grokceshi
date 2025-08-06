@@ -2,6 +2,8 @@ import requests
 import base64
 import yaml
 import os
+import socket
+import time
 
 def parse_ss_link(link):
     if not link.startswith("ss://"):
@@ -12,8 +14,8 @@ def parse_ss_link(link):
     if "#" in encoded:
         encoded = encoded.split("#")[0]
     try:
-        # 解码 base64 编码的链接
-        decoded = base64.b64decode(encoded + "==").decode('utf-8')  # 添加 padding
+        # 解码 base64 编码的链接，添加 padding
+        decoded = base64.b64decode(encoded + "==").decode('utf-8')
     except:
         return None
     # 分割为认证部分和主机端口部分
@@ -46,10 +48,30 @@ def parse_ss_link(link):
         "udp": True
     }
 
-# 定义多个 Shadowsocks 链接来源
+def test_proxy(server, port, timeout=5):
+    """简单测试代理服务器是否可连接"""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        start_time = time.time()
+        sock.connect((server, port))
+        sock.close()
+        latency = (time.time() - start_time) * 1000  # 毫秒
+        return latency < 2000  # 延迟小于 2 秒视为有效
+    except:
+        return False
+
+# 定义多个 Shadowsocks 订阅源
 sources = [
     "https://raw.githubusercontent.com/Pawdroid/Free-servers/main/sub",
-    "https://raw.githubusercontent.com/lagzian/SS-Collector/main/Shadowsocks.txt"
+    "https://raw.githubusercontent.com/lagzian/SS-Collector/main/Shadowsocks.txt",
+    "https://raw.githubusercontent.com/freefq/free/master/shadowsocks",
+    "https://raw.githubusercontent.com/mahdibland/SSAggregator/master/sub/shadowsocks",
+    "https://raw.githubusercontent.com/freeshadow-node/free-nodes/main/shadowsocks.txt",
+    "https://free-ss.site/api/ss.php",
+    "https://raw.githubusercontent.com/getfreecloud/free/master/ss.txt",
+    "https://raw.githubusercontent.com/itdog-free/free-nodes/main/shadowsocks/ss.txt",
+    "https://raw.githubusercontent.com/roosterkid/openproxylist/main/V2RAY_RAW.txt"
 ]
 
 proxies = []
@@ -57,13 +79,19 @@ for url in sources:
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-        links = response.text.splitlines()
+        if "free-ss.site" in url:
+            # 处理 JSON 格式
+            data = response.json()
+            links = [item.get("link") for item in data if item.get("link", "").startswith("ss://")]
+        else:
+            # 纯文本格式
+            links = response.text.splitlines()
         for link in links:
             if link.startswith("ss://"):
                 proxy = parse_ss_link(link)
-                if proxy:
-                    # 避免重复添加
-                    if proxy not in proxies:
+                if proxy and proxy not in proxies:
+                    # 测试节点有效性
+                    if test_proxy(proxy["server"], proxy["port"]):
                         proxies.append(proxy)
     except requests.RequestException as e:
         print(f"从 {url} 获取链接失败: {e}")
@@ -99,4 +127,4 @@ with open("docs/proxy.yaml", "rb") as f:
 with open("docs/sub", "w", encoding="utf-8") as f:
     f.write(b64)
 
-print(f"生成完成，共 {len(proxies)} 个节点")
+print(f"生成完成，共 {len(proxies)} 个有效节点")
